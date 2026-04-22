@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import mammoth from 'mammoth'
 import './App.css'
 
 type Status = 'idle' | 'ready' | 'typing' | 'paused' | 'done'
 
 type UploadedDoc = {
   name: string
-  text: string
   size: number
 }
 
@@ -14,7 +12,7 @@ function App() {
   const [status, setStatus] = useState<Status>('idle')
   const [doc, setDoc] = useState<UploadedDoc | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [targetContent, setTargetContent] = useState('')
   const [typed, setTyped] = useState('')
   const [wpm, setWpm] = useState(65)
   const [humanize, setHumanize] = useState(true)
@@ -25,7 +23,7 @@ function App() {
   const timerRef = useRef<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const sourceText = doc?.text ?? ''
+  const sourceText = targetContent
 
   const progress = useMemo(() => {
     if (!sourceText.length) return 0
@@ -64,37 +62,13 @@ function App() {
     }, Math.max(8, delay))
   }
 
-  async function handleFiles(files: FileList | null) {
+  function handleFiles(files: FileList | null) {
     if (!files || !files.length) return
     const file = files[0]
     setUploadError(null)
-    setUploading(true)
     handleStop()
-    try {
-      const lower = file.name.toLowerCase()
-      let text = ''
-      if (lower.endsWith('.docx')) {
-        const buf = await file.arrayBuffer()
-        const result = await mammoth.extractRawText({ arrayBuffer: buf })
-        text = result.value
-      } else if (lower.endsWith('.txt') || lower.endsWith('.md')) {
-        text = await file.text()
-      } else if (lower.endsWith('.doc')) {
-        throw new Error('Legacy .doc not supported. In Google Docs use File → Download → Microsoft Word (.docx).')
-      } else {
-        throw new Error('Unsupported file. Upload a .docx (Google Docs export), .txt, or .md file.')
-      }
-      text = text.replace(/\r\n/g, '\n').trim()
-      if (!text.length) throw new Error('That document is empty.')
-      setDoc({ name: file.name, text, size: file.size })
-      setStatus('ready')
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err))
-      setDoc(null)
-      setStatus('idle')
-    } finally {
-      setUploading(false)
-    }
+    setDoc({ name: file.name, size: file.size })
+    setStatus(targetContent.trim().length ? 'ready' : 'idle')
   }
 
   function handleStart() {
@@ -123,7 +97,7 @@ function App() {
     timerRef.current = null
     indexRef.current = 0
     setTyped('')
-    setStatus(doc ? 'ready' : 'idle')
+    setStatus(doc && sourceText.length ? 'ready' : 'idle')
   }
 
   function handleRemove() {
@@ -140,7 +114,7 @@ function App() {
   }
 
   const statusLabel: Record<Status, string> = {
-    idle: 'No document',
+    idle: 'No target file',
     ready: 'Ready',
     typing: 'Typing…',
     paused: 'Paused',
@@ -165,7 +139,7 @@ function App() {
       <main className="layout">
         <section className="panel">
           <div className="panel-header">
-            <h2>Source document</h2>
+            <h2>Target file + content</h2>
             {doc && <span className="muted">{sourceText.length.toLocaleString()} chars</span>}
           </div>
 
@@ -189,38 +163,48 @@ function App() {
                 <div className="file-info">
                   <div className="file-name">{doc.name}</div>
                   <div className="muted">
-                    {formatSize(doc.size)} · {sourceText.length.toLocaleString()} chars
+                    {formatSize(doc.size)} target file
                   </div>
                 </div>
                 <button className="ghost small" onClick={handleRemove}>
                   Remove
                 </button>
               </div>
-            ) : uploading ? (
-              <div className="dropzone-empty">
-                <div className="dropzone-icon">…</div>
-                <div>Reading document…</div>
-              </div>
             ) : (
               <div className="dropzone-empty">
                 <div className="dropzone-icon">↑</div>
-                <div className="dropzone-title">Upload your Google Doc</div>
+                <div className="dropzone-title">Upload target file</div>
                 <div className="muted">
-                  Drag & drop, or click to browse. Accepts .docx, .txt, .md
-                </div>
-                <div className="muted hint">
-                  In Google Docs: File → Download → Microsoft Word (.docx)
+                  Drag & drop, or click to browse. This picks the file to write into.
                 </div>
               </div>
             )}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".docx,.txt,.md"
               onChange={(e) => handleFiles(e.target.files)}
               hidden
             />
           </div>
+
+          <label className="content-input-wrap">
+            <span>Text to write into the uploaded file</span>
+            <textarea
+              className="content-input"
+              value={targetContent}
+              onChange={(e) => {
+                const nextContent = e.target.value
+                setTargetContent(nextContent)
+                if (!nextContent.trim().length) {
+                  setStatus('idle')
+                } else if (doc && status !== 'typing' && status !== 'paused') {
+                  setStatus('ready')
+                }
+              }}
+              placeholder="Type the exact content you want written..."
+              rows={6}
+            />
+          </label>
 
           {uploadError && <div className="error">{uploadError}</div>}
 
@@ -256,7 +240,7 @@ function App() {
           </div>
 
           <div className="doc-meta">
-            <div className="doc-title-static">{doc?.name ?? 'No document loaded'}</div>
+            <div className="doc-title-static">{doc?.name ?? 'No target file loaded'}</div>
           </div>
 
           <div className="doc-page">
@@ -283,7 +267,7 @@ function App() {
                 Resume
               </button>
             ) : (
-              <button className="primary" onClick={handleStart} disabled={!doc}>
+              <button className="primary" onClick={handleStart} disabled={!doc || !sourceText.length}>
                 Start typing
               </button>
             )}
@@ -299,8 +283,7 @@ function App() {
       </main>
 
       <footer className="footnote muted">
-        UI scaffold inspired by Grubby.ai's Drippy autotyper. Documents are
-        parsed locally in your browser.
+        UI scaffold inspired by Grubby.ai's Drippy autotyper.
       </footer>
     </div>
   )
