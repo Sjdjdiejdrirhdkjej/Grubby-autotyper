@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import mammoth from 'mammoth'
 import './App.css'
 
-type Status = 'idle' | 'connected' | 'typing' | 'paused' | 'done'
+type Status = 'idle' | 'ready' | 'typing' | 'paused' | 'done'
 
-const SAMPLE_TEXT = `The quick brown fox jumps over the lazy dog. Autotyping mimics natural human cadence by varying delays between keystrokes, occasionally pausing between words and sentences. This makes the output feel like a person is genuinely composing the document in real time.`
+type UploadedDoc = {
+  name: string
+  text: string
+  size: number
+}
 
 function App() {
   const [status, setStatus] = useState<Status>('idle')
-  const [googleEmail, setGoogleEmail] = useState<string | null>(null)
-  const [docTitle, setDocTitle] = useState('Untitled document')
-  const [sourceText, setSourceText] = useState(SAMPLE_TEXT)
+  const [doc, setDoc] = useState<UploadedDoc | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [typed, setTyped] = useState('')
   const [wpm, setWpm] = useState(65)
   const [humanize, setHumanize] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
 
   const indexRef = useRef(0)
   const timerRef = useRef<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const sourceText = doc?.text ?? ''
 
   const progress = useMemo(() => {
     if (!sourceText.length) return 0
@@ -55,19 +64,41 @@ function App() {
     }, Math.max(8, delay))
   }
 
-  function handleConnect() {
-    setGoogleEmail('you@example.com')
-    setStatus('connected')
-  }
-
-  function handleDisconnect() {
+  async function handleFiles(files: FileList | null) {
+    if (!files || !files.length) return
+    const file = files[0]
+    setUploadError(null)
+    setUploading(true)
     handleStop()
-    setGoogleEmail(null)
-    setStatus('idle')
+    try {
+      const lower = file.name.toLowerCase()
+      let text = ''
+      if (lower.endsWith('.docx')) {
+        const buf = await file.arrayBuffer()
+        const result = await mammoth.extractRawText({ arrayBuffer: buf })
+        text = result.value
+      } else if (lower.endsWith('.txt') || lower.endsWith('.md')) {
+        text = await file.text()
+      } else if (lower.endsWith('.doc')) {
+        throw new Error('Legacy .doc not supported. In Google Docs use File → Download → Microsoft Word (.docx).')
+      } else {
+        throw new Error('Unsupported file. Upload a .docx (Google Docs export), .txt, or .md file.')
+      }
+      text = text.replace(/\r\n/g, '\n').trim()
+      if (!text.length) throw new Error('That document is empty.')
+      setDoc({ name: file.name, text, size: file.size })
+      setStatus('ready')
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : String(err))
+      setDoc(null)
+      setStatus('idle')
+    } finally {
+      setUploading(false)
+    }
   }
 
   function handleStart() {
-    if (!googleEmail) return
+    if (!doc) return
     if (status === 'done') {
       indexRef.current = 0
       setTyped('')
@@ -92,12 +123,25 @@ function App() {
     timerRef.current = null
     indexRef.current = 0
     setTyped('')
-    setStatus(googleEmail ? 'connected' : 'idle')
+    setStatus(doc ? 'ready' : 'idle')
+  }
+
+  function handleRemove() {
+    handleStop()
+    setDoc(null)
+    setStatus('idle')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  function formatSize(n: number) {
+    if (n < 1024) return `${n} B`
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+    return `${(n / 1024 / 1024).toFixed(2)} MB`
   }
 
   const statusLabel: Record<Status, string> = {
-    idle: 'Not connected',
-    connected: 'Ready',
+    idle: 'No document',
+    ready: 'Ready',
     typing: 'Typing…',
     paused: 'Paused',
     done: 'Complete',
@@ -115,31 +159,70 @@ function App() {
           <button className="ghost" onClick={() => setShowSettings((v) => !v)}>
             Settings
           </button>
-          {googleEmail ? (
-            <button className="ghost" onClick={handleDisconnect}>
-              Disconnect
-            </button>
-          ) : (
-            <button className="primary" onClick={handleConnect}>
-              Connect Google
-            </button>
-          )}
         </div>
       </header>
 
       <main className="layout">
         <section className="panel">
           <div className="panel-header">
-            <h2>Source text</h2>
-            <span className="muted">{sourceText.length.toLocaleString()} chars</span>
+            <h2>Source document</h2>
+            {doc && <span className="muted">{sourceText.length.toLocaleString()} chars</span>}
           </div>
-          <textarea
-            className="source"
-            value={sourceText}
-            onChange={(e) => setSourceText(e.target.value)}
-            placeholder="Paste your humanized text here…"
-            disabled={status === 'typing'}
-          />
+
+          <div
+            className={`dropzone ${dragOver ? 'drag' : ''} ${doc ? 'has-doc' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOver(false)
+              handleFiles(e.dataTransfer.files)
+            }}
+            onClick={() => !doc && fileInputRef.current?.click()}
+          >
+            {doc ? (
+              <div className="file-card">
+                <div className="file-icon">DOC</div>
+                <div className="file-info">
+                  <div className="file-name">{doc.name}</div>
+                  <div className="muted">
+                    {formatSize(doc.size)} · {sourceText.length.toLocaleString()} chars
+                  </div>
+                </div>
+                <button className="ghost small" onClick={handleRemove}>
+                  Remove
+                </button>
+              </div>
+            ) : uploading ? (
+              <div className="dropzone-empty">
+                <div className="dropzone-icon">…</div>
+                <div>Reading document…</div>
+              </div>
+            ) : (
+              <div className="dropzone-empty">
+                <div className="dropzone-icon">↑</div>
+                <div className="dropzone-title">Upload your Google Doc</div>
+                <div className="muted">
+                  Drag & drop, or click to browse. Accepts .docx, .txt, .md
+                </div>
+                <div className="muted hint">
+                  In Google Docs: File → Download → Microsoft Word (.docx)
+                </div>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx,.txt,.md"
+              onChange={(e) => handleFiles(e.target.files)}
+              hidden
+            />
+          </div>
+
+          {uploadError && <div className="error">{uploadError}</div>}
 
           {showSettings && (
             <div className="settings">
@@ -168,36 +251,18 @@ function App() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>Target document</h2>
+            <h2>Live typing</h2>
             <span className={`status status-${status}`}>{statusLabel[status]}</span>
           </div>
 
           <div className="doc-meta">
-            <input
-              className="doc-title"
-              value={docTitle}
-              onChange={(e) => setDocTitle(e.target.value)}
-              disabled={status === 'typing'}
-            />
-            <div className="doc-account">
-              {googleEmail ? (
-                <>
-                  <span className="dot dot-green" /> {googleEmail}
-                </>
-              ) : (
-                <>
-                  <span className="dot dot-gray" /> No Google account
-                </>
-              )}
-            </div>
+            <div className="doc-title-static">{doc?.name ?? 'No document loaded'}</div>
           </div>
 
           <div className="doc-page">
             <pre className="doc-content">
               {typed}
-              {(status === 'typing' || status === 'paused') && (
-                <span className="caret" />
-              )}
+              {(status === 'typing' || status === 'paused') && <span className="caret" />}
             </pre>
           </div>
 
@@ -218,18 +283,14 @@ function App() {
                 Resume
               </button>
             ) : (
-              <button
-                className="primary"
-                onClick={handleStart}
-                disabled={!googleEmail || !sourceText.length}
-              >
+              <button className="primary" onClick={handleStart} disabled={!doc}>
                 Start typing
               </button>
             )}
             <button
               className="ghost"
               onClick={handleStop}
-              disabled={status === 'idle' || status === 'connected'}
+              disabled={status === 'idle' || status === 'ready'}
             >
               Stop
             </button>
@@ -238,8 +299,8 @@ function App() {
       </main>
 
       <footer className="footnote muted">
-        UI scaffold inspired by Grubby.ai's Drippy autotyper. No real Google
-        Docs API calls are made.
+        UI scaffold inspired by Grubby.ai's Drippy autotyper. Documents are
+        parsed locally in your browser.
       </footer>
     </div>
   )
