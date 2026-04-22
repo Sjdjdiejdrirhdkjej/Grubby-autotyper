@@ -216,10 +216,28 @@
 }
 .output-text {
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.75;
   color: #1f2230;
   white-space: pre-wrap;
   width: 100%;
+}
+.changed-word {
+  text-decoration: underline;
+  text-decoration-color: #8b5cf6;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  background: linear-gradient(180deg, transparent 60%, rgba(139, 92, 246, 0.12) 60%);
+  border-radius: 2px;
+  padding: 0 1px;
+  transition: background 0.15s;
+  cursor: help;
+}
+.changed-word:hover {
+  background: rgba(139, 92, 246, 0.22);
+}
+.changed-count {
+  color: #7c3aed;
+  font-weight: 600;
 }
 .output-footer { justify-content: flex-end; }
 

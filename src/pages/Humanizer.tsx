@@ -73,53 +73,89 @@ const CONTRACTIONS: Array<[RegExp, string]> = [
   [/\bwe are\b/g, "we're"],
 ]
 
-function humanize(input: string, style: Style, tone: Tone): string {
-  if (!input.trim()) return ''
-  let text = input
+type Segment = { text: string; changed: boolean }
 
-  // Tone: academic keeps formal vocabulary
+const MARK_OPEN = '\u0001'
+const MARK_CLOSE = '\u0002'
+const wrap = (s: string) => MARK_OPEN + s + MARK_CLOSE
+
+function humanize(input: string, style: Style, tone: Tone): Segment[] {
+  if (!input.trim()) return []
+
   const aggression = style === 'Simple' ? 0.4 : style === 'Standard' ? 0.7 : 1
   const allowContractions = tone !== 'Academic'
 
-  // Synonym swap
-  text = text.replace(/\b([A-Za-z]+)\b/g, (word) => {
+  // Synonym swap — wrap replacements with markers so we can render underlines
+  let text = input.replace(/\b([A-Za-z]+)\b/g, (word) => {
     const lower = word.toLowerCase()
     const opts = SYNONYMS[lower]
     if (!opts) return word
     if (Math.random() > aggression) return word
-    const pick = opts[Math.floor(Math.random() * opts.length)]
+    let pick = opts[Math.floor(Math.random() * opts.length)]
     if (word[0] === word[0].toUpperCase()) {
-      return pick[0].toUpperCase() + pick.slice(1)
+      pick = pick[0].toUpperCase() + pick.slice(1)
     }
-    return pick
+    return wrap(pick)
   })
 
   if (allowContractions) {
-    for (const [re, rep] of CONTRACTIONS) text = text.replace(re, rep)
+    for (const [re, rep] of CONTRACTIONS) text = text.replace(re, wrap(rep))
   }
 
   // Sentence-level tweaks
-  const sentences = text.match(/[^.!?]+[.!?]+\s*/g) ?? [text]
+  const sentences = text.split(/(?<=[.!?])\s+/)
+  const lower1st = (s: string) =>
+    s.replace(/^([\u0001\u0002]*)([A-Z])/, (_m, mk, ch) => mk + ch.toLowerCase())
+
   const out = sentences.map((s, i) => {
-    let t = s.trim()
+    let t = s
     if (style === 'Enhanced' && Math.random() < 0.35 && t.length > 40) {
       const parts = t.split(', ')
       if (parts.length > 1) {
         const tail = parts.pop()!
-        t = tail.replace(/[.!?]+$/, '') + ', ' + parts.join(', ') + '.'
-        t = t[0].toUpperCase() + t.slice(1)
+        const reordered = tail.replace(/[.!?]+$/, '') + ', ' + parts.join(', ') + '.'
+        t = wrap(reordered)
       }
     }
     if (tone === 'Casual' && i > 0 && Math.random() < 0.25) {
-      t = ['Honestly, ', 'Basically, ', 'In short, '][Math.floor(Math.random() * 3)] + t[0].toLowerCase() + t.slice(1)
+      const prefix = ['Honestly,', 'Basically,', 'In short,'][Math.floor(Math.random() * 3)]
+      t = wrap(prefix) + ' ' + lower1st(t)
     }
     if (tone === 'Formal' && Math.random() < 0.15) {
-      t = 'Notably, ' + t[0].toLowerCase() + t.slice(1)
+      t = wrap('Notably,') + ' ' + lower1st(t)
     }
     return t
   })
 
-  return out.join(' ').replace(/\s+/g, ' ').trim()
+  const final = out.join(' ').replace(/[ \t]+/g, ' ').trim()
+
+  // Parse markers into segments (handles nesting by tracking depth)
+  const segs: Segment[] = []
+  let buf = ''
+  let depth = 0
+  for (const ch of final) {
+    if (ch === MARK_OPEN) {
+      if (buf) segs.push({ text: buf, changed: depth > 0 })
+      buf = ''
+      depth++
+    } else if (ch === MARK_CLOSE) {
+      if (buf) segs.push({ text: buf, changed: depth > 0 })
+      buf = ''
+      depth = Math.max(0, depth - 1)
+    } else {
+      buf += ch
+    }
+  }
+  if (buf) segs.push({ text: buf, changed: depth > 0 })
+
+  // Merge adjacent segments with the same `changed` flag
+  const merged: Segment[] = []
+  for (const s of segs) {
+    const prev = merged[merged.length - 1]
+    if (prev && prev.changed === s.changed) prev.text += s.text
+    else merged.push({ ...s })
+  }
+  return merged
 }
 
 function countWords(s: string) {
@@ -134,7 +170,7 @@ const TONES: Tone[] = ['Casual', 'Formal', 'Academic']
 
 function Humanizer() {
   const [input, setInput] = useState('')
-  const [output, setOutput] = useState('')
+  const [output, setOutput] = useState<Segment[]>([])
   const [mode, setMode] = useState<Mode>('GPTZero')
   const [style, setStyle] = useState<Style>('Standard')
   const [tone, setTone] = useState<Tone>('Casual')
@@ -144,12 +180,21 @@ function Humanizer() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const inputWords = useMemo(() => countWords(input), [input])
-  const outputWords = useMemo(() => countWords(output), [output])
+  const outputText = useMemo(() => output.map((s) => s.text).join(''), [output])
+  const outputWords = useMemo(() => countWords(outputText), [outputText])
+  const changedWords = useMemo(
+    () =>
+      output.reduce(
+        (n, s) => (s.changed ? n + countWords(s.text) : n),
+        0
+      ),
+    [output]
+  )
 
   async function handleHumanize() {
     if (!input.trim() || loading) return
     setLoading(true)
-    setOutput('')
+    setOutput([])
     setProgress(0)
     setCopied(false)
     // Simulated processing time, scaled by input length
@@ -166,6 +211,17 @@ function Humanizer() {
     })
     setOutput(humanize(input, style, tone))
     setLoading(false)
+  }
+
+  async function handleCopyText() {
+    if (!outputText) return
+    try {
+      await navigator.clipboard.writeText(outputText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* ignore */
+    }
   }
 
   async function handlePaste() {
@@ -190,17 +246,6 @@ function Humanizer() {
       alert('Unsupported file. Use .txt or .md.')
     }
     if (fileRef.current) fileRef.current.value = ''
-  }
-
-  async function handleCopy() {
-    if (!output) return
-    try {
-      await navigator.clipboard.writeText(output)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* ignore */
-    }
   }
 
   return (
@@ -308,8 +353,11 @@ function Humanizer() {
           <div className="pane-header pane-header-output">
             <span className="pane-emoji">🧑</span>
             <span className="pane-title">Humanized Content</span>
-            {output && (
-              <span className="word-count">{outputWords.toLocaleString()} words</span>
+            {output.length > 0 && (
+              <span className="word-count">
+                {outputWords.toLocaleString()} words ·{' '}
+                <span className="changed-count">{changedWords} changed</span>
+              </span>
             )}
           </div>
 
@@ -323,8 +371,18 @@ function Humanizer() {
                   Rewriting with {mode} bypass · {style} · {tone}…
                 </div>
               </div>
-            ) : output ? (
-              <div className="output-text">{output}</div>
+            ) : output.length > 0 ? (
+              <div className="output-text">
+                {output.map((seg, idx) =>
+                  seg.changed ? (
+                    <span key={idx} className="changed-word" title="Rewritten">
+                      {seg.text}
+                    </span>
+                  ) : (
+                    <span key={idx}>{seg.text}</span>
+                  )
+                )}
+              </div>
             ) : (
               <div className="output-placeholder">
                 Your humanized content will appear here.
@@ -332,12 +390,12 @@ function Humanizer() {
             )}
           </div>
 
-          {output && !loading && (
+          {output.length > 0 && !loading && (
             <div className="pane-footer output-footer">
-              <button className="action" onClick={handleCopy}>
+              <button className="action" onClick={handleCopyText}>
                 {copied ? '✓ Copied' : '📋 Copy'}
               </button>
-              <button className="action" onClick={() => setOutput('')}>
+              <button className="action" onClick={() => setOutput([])}>
                 ✕ Clear
               </button>
             </div>
