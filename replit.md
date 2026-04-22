@@ -21,6 +21,12 @@ No real Google Docs API or OAuth calls are made.
 - Workflow `Start application` runs `npm run dev` on port 5000
 - `vite.config.ts` sets host `0.0.0.0`, port `5000`, `allowedHosts: true` for the Replit proxy
 
+## Google auth note
+The user dismissed Replit's built-in Google Docs connector. Do NOT re-suggest it.
+Real Google auth is being implemented manually using `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` secrets with a backend OAuth flow (scopes:
+`drive.file`, `userinfo.email`).
+
 ## Files
 - `src/App.tsx` — main UI + autotyper state machine
 - `src/App.css` — styling
