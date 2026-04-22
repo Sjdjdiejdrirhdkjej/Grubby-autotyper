@@ -176,6 +176,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-color: var(--accent);
 }
 
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
 .error {
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid var(--danger);
@@ -223,6 +230,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.doc-link {
+  display: inline-block;
+  margin-top: -4px;
 }
 
 .doc-page {
