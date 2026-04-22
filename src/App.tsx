@@ -3,25 +3,18 @@ import './App.css'
 
 type Status = 'idle' | 'ready' | 'typing' | 'paused' | 'done'
 
-type UploadedDoc = {
-  name: string
-  size: number
-}
-
 function App() {
   const [status, setStatus] = useState<Status>('idle')
-  const [doc, setDoc] = useState<UploadedDoc | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [targetContent, setTargetContent] = useState('')
   const [typed, setTyped] = useState('')
   const [wpm, setWpm] = useState(65)
   const [humanize, setHumanize] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
+  const [helperCopied, setHelperCopied] = useState(false)
 
   const indexRef = useRef(0)
   const timerRef = useRef<number | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const sourceText = targetContent
 
@@ -39,13 +32,12 @@ function App() {
     }
   }, [])
 
-  function scheduleNextChar() {
-    const i = indexRef.current
-    if (i >= sourceText.length) {
-      setStatus('done')
-      return
-    }
-    const ch = sourceText[i]
+  function clearTimers() {
+    if (timerRef.current) window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  function getDelayForChar(ch: string) {
     let delay = baseDelay
     if (humanize) {
       const jitter = (Math.random() - 0.5) * baseDelay * 0.8
@@ -55,66 +47,98 @@ function App() {
       if (ch === ',' || ch === ';') delay += 120 + Math.random() * 200
       if (Math.random() < 0.02) delay += 600 + Math.random() * 800
     }
+    return Math.max(8, delay)
+  }
+
+  function scheduleNextChar() {
+    const i = indexRef.current
+    if (i >= sourceText.length) {
+      setStatus('done')
+      return
+    }
+
+    const ch = sourceText[i]
     timerRef.current = window.setTimeout(() => {
       indexRef.current = i + 1
       setTyped(sourceText.slice(0, indexRef.current))
       scheduleNextChar()
-    }, Math.max(8, delay))
+    }, getDelayForChar(ch))
   }
 
-  function handleFiles(files: FileList | null) {
-    if (!files || !files.length) return
-    const file = files[0]
-    setUploadError(null)
-    handleStop()
-    setDoc({ name: file.name, size: file.size })
-    setStatus(targetContent.trim().length ? 'ready' : 'idle')
-  }
+  function buildHelperScript() {
+    const delays: number[] = []
+    for (const ch of sourceText) delays.push(Math.round(getDelayForChar(ch)))
 
-  function handleStart() {
-    if (!doc) return
-    if (status === 'done') {
-      indexRef.current = 0
-      setTyped('')
+    const escapedText = JSON.stringify(sourceText)
+    const escapedDelays = JSON.stringify(delays)
+
+    return `(async () => {
+  const text = ${escapedText};
+  const delays = ${escapedDelays};
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const target = document.activeElement;
+  if (!target) {
+    alert('Focus the Google Docs editor first.');
+    return;
+  }
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (typeof document.execCommand === 'function') {
+      document.execCommand('insertText', false, ch);
+    } else if (target.isContentEditable) {
+      target.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ch, bubbles: true, cancelable: true }));
+      target.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ch, bubbles: true }));
     }
+    await sleep(delays[i] || 20);
+  }
+})();`
+  }
+
+  async function handleStart() {
+    if (!sourceText.length) return
+    clearTimers()
+    indexRef.current = 0
+    setTyped('')
     setStatus('typing')
     scheduleNextChar()
   }
 
   function handlePause() {
-    if (timerRef.current) window.clearTimeout(timerRef.current)
-    timerRef.current = null
+    clearTimers()
     setStatus('paused')
   }
 
   function handleResume() {
+    setErrorMessage(null)
     setStatus('typing')
     scheduleNextChar()
   }
 
   function handleStop() {
-    if (timerRef.current) window.clearTimeout(timerRef.current)
-    timerRef.current = null
+    clearTimers()
     indexRef.current = 0
     setTyped('')
-    setStatus(doc && sourceText.length ? 'ready' : 'idle')
+    setStatus(sourceText.length ? 'ready' : 'idle')
   }
 
-  function handleRemove() {
-    handleStop()
-    setDoc(null)
-    setStatus('idle')
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
+  async function copyHelperScript() {
+    setErrorMessage(null)
+    setHelperCopied(false)
+    if (!sourceText.length) {
+      setErrorMessage('Add text first so there is content to type.')
+      return
+    }
 
-  function formatSize(n: number) {
-    if (n < 1024) return `${n} B`
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-    return `${(n / 1024 / 1024).toFixed(2)} MB`
+    try {
+      await navigator.clipboard.writeText(buildHelperScript())
+      setHelperCopied(true)
+    } catch {
+      setErrorMessage('Clipboard copy failed. Allow clipboard access and try again.')
+    }
   }
 
   const statusLabel: Record<Status, string> = {
-    idle: 'No target file',
+    idle: 'No content',
     ready: 'Ready',
     typing: 'Typing…',
     paused: 'Paused',
@@ -127,7 +151,7 @@ function App() {
         <div className="brand">
           <span className="brand-dot" />
           <span className="brand-name">Drippy</span>
-          <span className="brand-tag">Autotyper</span>
+          <span className="brand-tag">Manual Docs Mode</span>
         </div>
         <div className="topbar-actions">
           <button className="ghost" onClick={() => setShowSettings((v) => !v)}>
@@ -139,74 +163,42 @@ function App() {
       <main className="layout">
         <section className="panel">
           <div className="panel-header">
-            <h2>Target file + content</h2>
-            {doc && <span className="muted">{sourceText.length.toLocaleString()} chars</span>}
-          </div>
-
-          <div
-            className={`dropzone ${dragOver ? 'drag' : ''} ${doc ? 'has-doc' : ''}`}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragOver(true)
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragOver(false)
-              handleFiles(e.dataTransfer.files)
-            }}
-            onClick={() => !doc && fileInputRef.current?.click()}
-          >
-            {doc ? (
-              <div className="file-card">
-                <div className="file-icon">DOC</div>
-                <div className="file-info">
-                  <div className="file-name">{doc.name}</div>
-                  <div className="muted">
-                    {formatSize(doc.size)} target file
-                  </div>
-                </div>
-                <button className="ghost small" onClick={handleRemove}>
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <div className="dropzone-empty">
-                <div className="dropzone-icon">↑</div>
-                <div className="dropzone-title">Upload target file</div>
-                <div className="muted">
-                  Drag & drop, or click to browse. This picks the file to write into.
-                </div>
-              </div>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={(e) => handleFiles(e.target.files)}
-              hidden
-            />
+            <h2>Manual Google Docs run</h2>
+            <span className="status status-connected">No auth required</span>
           </div>
 
           <label className="content-input-wrap">
-            <span>Text to write into the uploaded file</span>
+            <span>Text to write into the Google Doc</span>
             <textarea
               className="content-input"
               value={targetContent}
               onChange={(e) => {
-                const nextContent = e.target.value
-                setTargetContent(nextContent)
-                if (!nextContent.trim().length) {
-                  setStatus('idle')
-                } else if (doc && status !== 'typing' && status !== 'paused') {
-                  setStatus('ready')
+                setTargetContent(e.target.value)
+                if (status === 'idle' || status === 'ready') {
+                  setStatus(e.target.value.length ? 'ready' : 'idle')
                 }
               }}
               placeholder="Type the exact content you want written..."
-              rows={6}
+              rows={8}
             />
           </label>
 
-          {uploadError && <div className="error">{uploadError}</div>}
+          <div className="instructions">
+            <div className="instruction-title">How to run in an already-open Google Doc</div>
+            <ol>
+              <li>Open your Google Doc and click where typing should begin.</li>
+              <li>Click <code>Copy helper script</code> below.</li>
+              <li>In the Doc tab, open DevTools Console and paste + run it.</li>
+            </ol>
+            <div className="muted">
+              This is best-effort browser automation. Keep the tab focused while it runs.
+            </div>
+            <button className="ghost" onClick={copyHelperScript} disabled={!sourceText.length}>
+              {helperCopied ? 'Copied helper script' : 'Copy helper script'}
+            </button>
+          </div>
+
+          {errorMessage && <div className="error">{errorMessage}</div>}
 
           {showSettings && (
             <div className="settings">
@@ -240,7 +232,7 @@ function App() {
           </div>
 
           <div className="doc-meta">
-            <div className="doc-title-static">{doc?.name ?? 'No target file loaded'}</div>
+            <div className="doc-title-static">Preview only (local simulation)</div>
           </div>
 
           <div className="doc-page">
@@ -267,7 +259,11 @@ function App() {
                 Resume
               </button>
             ) : (
-              <button className="primary" onClick={handleStart} disabled={!doc || !sourceText.length}>
+              <button
+                className="primary"
+                onClick={handleStart}
+                disabled={!sourceText.length}
+              >
                 Start typing
               </button>
             )}
@@ -283,7 +279,7 @@ function App() {
       </main>
 
       <footer className="footnote muted">
-        UI scaffold inspired by Grubby.ai's Drippy autotyper.
+        No API or OAuth setup: relies on your active Google Docs browser session.
       </footer>
     </div>
   )
