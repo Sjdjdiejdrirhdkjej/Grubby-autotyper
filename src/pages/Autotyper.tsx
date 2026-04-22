@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import './App.css'
+import { Link } from 'react-router-dom'
+import './Autotyper.css'
 
 type Status = 'idle' | 'ready' | 'typing' | 'paused' | 'done'
 
-function App() {
+function Autotyper() {
   const [status, setStatus] = useState<Status>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [targetContent, setTargetContent] = useState('')
@@ -154,6 +155,7 @@ function App() {
           <span className="brand-tag">Manual Docs Mode</span>
         </div>
         <div className="topbar-actions">
+          <Link to="/" className="ghost nav-link">Humanizer</Link>
           <button className="ghost" onClick={() => setShowSettings((v) => !v)}>
             Settings
           </button>
@@ -285,4 +287,4 @@ function App() {
   )
 }
 
-export default App
+export default Autotyper

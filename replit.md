@@ -26,6 +26,13 @@ The user opted out of Google authentication entirely. Instead, users upload
 their Google Doc (exported as .docx) or .txt/.md files. Parsing is done
 client-side with the `mammoth` package — no backend required.
 
+## Routes
+- `/` — Humanizer page (clone of grubby.ai's main humanizer UI). Mock
+  humanization is done client-side: synonym swaps, contractions, sentence
+  re-ordering, with Mode / Style / Tone selectors. No API.
+- `/autotyper` — original Drippy autotyper (manual mode, no Google auth).
+
 ## Files
-- `src/App.tsx` — main UI + autotyper state machine
-- `src/App.css` — styling
+- `src/main.tsx` — BrowserRouter + routes
+- `src/pages/Humanizer.tsx` / `.css` — grubby.ai homepage clone
+- `src/pages/Autotyper.tsx` / `.css` — autotyper UI

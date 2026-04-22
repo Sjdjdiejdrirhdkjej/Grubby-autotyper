@@ -1,0 +1,253 @@
+.hum-app {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at top left, rgba(124, 58, 237, 0.18), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(56, 189, 248, 0.14), transparent 60%),
+    #0a0a1f;
+  color: #e7eaf0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: 60px;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.hum-app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(139, 92, 246, 0.04) 0 1px, transparent 1px 60px),
+    repeating-linear-gradient(-45deg, rgba(56, 189, 248, 0.04) 0 1px, transparent 1px 60px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hum-app > * { position: relative; z-index: 1; }
+
+.banner {
+  background: linear-gradient(90deg, #7c3aed, #2563eb);
+  text-align: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.hum-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 36px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.hum-logo { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; }
+.hum-logo-mark { font-size: 22px; }
+.hum-logo-text { color: #fff; }
+.hum-logo-dot { color: #a78bfa; }
+
+.hum-nav { display: flex; align-items: center; gap: 18px; }
+.nav-text { color: #cbd5e1; font-size: 14px; cursor: pointer; text-decoration: none; }
+.nav-text:hover { color: #fff; }
+.nav-divider { width: 1px; height: 18px; background: #334155; }
+.nav-login {
+  background: #1e1b3a;
+  color: #fff;
+  border: 1px solid #2d2950;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nav-cta {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(139, 92, 246, 0.4);
+}
+.nav-cta:hover { filter: brightness(1.1); }
+
+.hero { text-align: center; padding: 36px 20px 28px; max-width: 900px; margin: 0 auto; }
+.hero-title {
+  font-size: 44px;
+  margin: 0 0 14px;
+  font-weight: 700;
+  background: linear-gradient(90deg, #6ee7b7 0%, #38bdf8 50%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.amp { color: #a78bfa; -webkit-text-fill-color: #a78bfa; }
+.hero-sub { color: #94a3b8; font-size: 16px; margin: 0; }
+
+.workbench {
+  max-width: 1200px;
+  margin: 24px auto 0;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+@media (max-width: 900px) {
+  .workbench { grid-template-columns: 1fr; max-width: 92vw; }
+}
+
+.pane { display: flex; flex-direction: column; min-height: 540px; }
+.pane-left { background: #fafaff; border-right: 1px solid #ececf3; }
+.pane-right { background: #f4f7fc; }
+
+.pane-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 20px;
+  font-weight: 600;
+  font-size: 15px;
+  color: #1f2230;
+}
+.pane-header-input { background: #efe9ff; }
+.pane-header-output { background: #e1ecff; }
+.pane-emoji { font-size: 18px; }
+.pane-title { flex: 1; }
+.word-count { font-size: 12px; color: #64748b; font-weight: 500; }
+
+.pane-body {
+  flex: 1;
+  padding: 16px 20px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1f2230;
+  min-height: 240px;
+}
+.pane-textarea::placeholder { color: #94a3b8; }
+
+.pane-actions {
+  position: absolute;
+  left: 50%;
+  top: 60%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 70%;
+  pointer-events: auto;
+}
+.action {
+  background: #f1ecff;
+  color: #6d28d9;
+  border: 1px solid #e3dbff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: 0.15s;
+}
+.action:hover { background: #e9e1ff; }
+.action-icon { font-size: 16px; }
+
+.pane-footer {
+  border-top: 1px solid #ececf3;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  flex-wrap: wrap;
+}
+
+.footer-controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.control { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; }
+.control-label { font-weight: 500; }
+.control select {
+  background: #1e1b3a;
+  color: #fff;
+  border: 1px solid #2d2950;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.humanize-btn {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  border: none;
+  padding: 10px 28px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+  transition: 0.15s;
+}
+.humanize-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.humanize-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.output-body { display: flex; align-items: stretch; }
+.output-placeholder {
+  margin: auto;
+  color: #94a3b8;
+  font-size: 14px;
+}
+.output-text {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #1f2230;
+  white-space: pre-wrap;
+  width: 100%;
+}
+.output-footer { justify-content: flex-end; }
+
+.loading {
+  margin: auto;
+  width: 80%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.loading-bar {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.loading-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6, #38bdf8);
+  transition: width 0.1s linear;
+}
+.loading-text { font-size: 13px; color: #64748b; }
+
+.hum-footer {
+  text-align: center;
+  margin-top: 32px;
+  color: #64748b;
+  font-size: 12px;
+}
